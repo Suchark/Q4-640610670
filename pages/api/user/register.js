@@ -1,58 +1,41 @@
-import { readUsersDB, writeUsersDB } from "../../../backendLibs/dbLib";
-import bcrypt from "bcrypt";
-import { checkToken } from "../../../backendLibs/checkToken";
+import { checkToken } from "../../backendLibs/checkToken";
+import { readUsersDB, writeUsersDB } from "../../backendLibs/dbLib";
 
-export default function userRegisterRoute(req, res) {
-  if (req.method === "POST") {
-    const { username, password, isAdmin } = req.body;
-
+export default function withdrawRoute(req, res) {
+  if (req.method === "PUT") {
     //check authentication
     const user = checkToken(req);
+    if (!user || user.isAdmin)
+      return res
+        .status(403)
+        .json({ ok: false, message: "You do not have permission to withdraw" });
 
-    if (!user || !user.isAdmin) {
-      return res.status(403).json({
-        ok: false,
-        message: "You do not have permission to create account",
-      });
+    const amount = req.body.amount;
+    //validate body
+    if (typeof amount !== "number")
+      return res.status(400).json({ ok: false, message: "Invalid amount" });
+
+    //check if amount < 1
+    if (amount < 1)
+      return res
+        .status(400)
+        .json({ ok: false, message: "Amount must be greater than 0" });
+
+    //find and update money in DB
+    const users = readUsersDB();
+    const userResult = users.find((x) => x.username === user.username);
+    if (userResult.money < amount) {
+      return res
+        .status(400)
+        .json({ ok: false, message: "You do not have enough money" });
+    } else {
+      userResult.money = userResult.money - amount;
+      writeUsersDB(users);
     }
 
-    //validate body
-    if (
-      typeof username !== "string" ||
-      username.length === 0 ||
-      typeof password !== "string" ||
-      password.length === 0 ||
-      typeof isAdmin !== "boolean"
-    )
-      return res
-        .status(400)
-        .json({ ok: false, message: "Invalid request body" });
-
-    //check if username is already in database
-    const users = readUsersDB();
-    //return res.status(400).json({ ok: false, message: "Username is already taken" });
-    ///////////////////////////
-    const foundUser = user.found((x) => x.username === username);
-    if (foundUser)
-      return res
-        .status(400)
-        .json({ ok: false, message: "Username is  already taken" });
-
-    const newUser = {
-      username,
-      password: bcrypt.hashSync(password, 12),
-      isAdmin,
-      money: 0,
-    };
-
-    //create new user and add in db
-
-    user.push(newUser);
-
-    writeUsersDB(users);
-
     //return response
-
-    return res.json({ ok: true, username, isAdmin });
+    return res.status(200).json({ ok: true, money: userResult.money });
+  } else {
+    return res.status(400).json({ ok: false, message: "Invalid HTTP Method" });
   }
 }
